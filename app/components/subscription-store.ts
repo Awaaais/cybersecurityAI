@@ -27,40 +27,52 @@ const FREE_SNAPSHOT = JSON.stringify(FREE_SUBSCRIPTION);
 export type SubscriptionPlan = {
   id: "free" | "platinum" | "premium-gold";
   name: string;
+  badge: string;
   description: string;
   monthlyPrice: string;
   yearlyPrice: string;
   features: string[];
+  limits: string[];
   usageLimit: string;
+  highlight: boolean;
 };
 
 export const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "free",
     name: "Basic",
-    description: "Build your security foundations at your own pace.",
+    badge: "Start here",
+    description: "Build your security foundations at your own pace, with no cost.",
     monthlyPrice: "KSh 0",
     yearlyPrice: "KSh 0",
-    features: ["Core cybersecurity lessons", "Linux notes and knowledge checks", "TeKAI beginner and standard modes"],
-    usageLimit: "No paid features",
+    features: ["Core cybersecurity lessons", "Linux notes and knowledge checks", "TeKAI Beginner and Standard modes"],
+    limits: ["One learner profile on this device", "Saved notes stored locally", "No interactive terminal labs"],
+    usageLimit: "Free forever · core learning only",
+    highlight: false,
   },
   {
     id: "platinum",
     name: "Platinum",
-    description: "Practice deeper with guided labs and advanced tutor mode.",
+    badge: "Most popular",
+    description: "Practice deeper with guided labs and an advanced tutor mode.",
     monthlyPrice: "KSh 499",
     yearlyPrice: "KSh 4,990",
-    features: ["Isolated command-terminal labs", "Advanced authentication and log exercises", "Expert TeKAI explanation mode"],
-    usageLimit: "Unlimited practice in the local simulator",
+    features: ["Unlimited isolated terminal labs", "Advanced authentication and log exercises", "Expert TeKAI explanation mode"],
+    limits: ["Unlimited practice in the local simulator", "Full guided lab library", "All TeKAI explanation modes"],
+    usageLimit: "Unlimited simulated practice",
+    highlight: true,
   },
   {
     id: "premium-gold",
     name: "Premium Gold",
-    description: "A higher-touch learning tier for focused security practice.",
+    badge: "Advanced",
+    description: "A higher-touch learning tier for focused, defensive security practice.",
     monthlyPrice: "Pricing not configured",
     yearlyPrice: "Pricing not configured",
     features: ["Everything in Platinum", "Advanced defensive scenarios", "Priority learning-path access"],
+    limits: ["Advanced multi-step lab scenarios", "Priority access to new labs", "Tier limits pending configuration"],
     usageLimit: "Tier limits not configured",
+    highlight: false,
   },
 ];
 

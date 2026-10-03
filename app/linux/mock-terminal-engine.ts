@@ -149,7 +149,7 @@ const runSimpleCommand = (source: string, input: string, state: MockTerminalStat
   try {
     switch (command) {
       case "help":
-        return { state, output: "Virtual Linux lab. Supported: pwd cd ls touch mkdir rm cp mv ln cat less head tail grep awk sed sort uniq chmod chown chgrp id whoami sudo ps top htop kill killall jobs bg fg ip ifconfig ping route ss netstat nmap echo clear. No host commands are executed." };
+        return { state, output: "Virtual Linux lab. Supported: pwd cd ls touch mkdir rm cp mv ln cat less head tail stat find grep cut awk sed sort uniq chmod chown chgrp umask id whoami env printenv uname hostname sudo ps top htop kill killall jobs bg fg ip ifconfig ping route ss netstat nmap curl wget ssh systemctl journalctl crontab apt dnf df free uptime echo clear help. No host commands are executed." };
       case "pwd":
         return { state, output: state.cwd };
       case "whoami":
@@ -475,6 +475,20 @@ const runSimpleCommand = (source: string, input: string, state: MockTerminalStat
         if (target === "192.0.2.53") return { state, output: "Starting Nmap (SIMULATED)\nNmap scan report for 192.0.2.53\nHost is up (simulated).\nPORT   STATE SERVICE\n53/udp open  domain\nScan complete: no packets were sent." };
         return fail("nmap: target outside isolated documentation-only lab scope; no packets were sent");
       }
+      case "ssh": {
+        const target = args.find((arg) => !arg.startsWith("-")) ?? "";
+        const host = target.includes("@") ? target.split("@").pop() ?? "" : target;
+        if (host !== "192.0.2.20" && host !== "192.0.2.53") {
+          return fail("ssh: only the simulated documentation hosts 192.0.2.20 and 192.0.2.53 are available; no real connection is made");
+        }
+        return { state, output: `Connected to ${target} (simulated).\nHost key verified against known_hosts. No real network connection was opened.` };
+      }
+      case "df":
+        return { state, output: "Filesystem      Size  Used Avail Use% Mounted on\n/dev/vda1        40G   12G   26G  32% /\n/dev/vdb1       100G   18G   77G  19% /var" };
+      case "free":
+        return { state, output: "              total        used        free      shared  buff/cache   available\nMem:           8000        3200        4800         120          ---        4200\nSwap:          2048           0        2048" };
+      case "uptime":
+        return { state, output: " 10:42:00 up 3 days,  4:12,  1 user,  load average: 0.08, 0.12, 0.10" };
       case "clear":
         return { state, output: "", clear: true };
       default:

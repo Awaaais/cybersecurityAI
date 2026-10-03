@@ -48,6 +48,9 @@ interface CourseAnswer {
   title: string;
   simple: string;
   technical: string;
+  example?: string;
+  relevance?: string;
+  related?: string[];
   sources: string[];
   diagram?: string;
 }
@@ -68,6 +71,9 @@ const courseAnswers: Array<{ matches: (question: string) => boolean; answer: Cou
       title: "SSH (Secure Shell)",
       simple: "SSH is a protocol for securely connecting to and operating a remote computer over an untrusted network. It encrypts the connection and commonly uses keys or passwords for authentication.",
       technical: "An SSH client negotiates an encrypted transport with an SSH server, then authenticates the user before opening a shell or forwarding an approved service. Verify host keys and protect private keys; this answer describes the protocol, not a command to access a system.",
+      example: "A command like `ssh learner@host` starts a session: the client verifies the host key, authenticates, then opens a remote shell.",
+      relevance: "SSH is a primary way administrators reach servers, so protecting keys and verifying host keys are everyday defensive tasks.",
+      related: ["SSH keys and host verification", "Linux commands", "Authentication and sessions"],
       sources: ["Linux Learning — SSH", "Networking Fundamentals — Secure protocols"],
     },
   },
@@ -116,8 +122,11 @@ const courseAnswers: Array<{ matches: (question: string) => boolean; answer: Cou
       && !/\b(permission|chmod|rwx|least privilege|sudo|chown|chgrp|users?|groups?|process(?:es)?|commands?|shell commands?)\b/.test(question),
     answer: {
       title: "What is Linux?",
-      simple: "The CyberTeKa course describes Linux as a foundation for servers, cloud workloads, security tools, and defensive operations. It gives you a shell and filesystem for working with those systems.",
-      technical: "Linux is the kernel at the core of an operating system. A Linux distribution combines that kernel with system tools and applications into an installable system. Ubuntu, Kali Linux, and Fedora are examples of distributions.",
+      simple: "Linux is a family of operating systems built around the Linux kernel. It gives you a shell and a filesystem for working with a computer, and it runs many servers, cloud workloads, and security tools.",
+      technical: "Linux itself is the kernel at the core of an operating system. A Linux distribution combines that kernel with system tools and applications into an installable system.",
+      example: "Common distributions include Ubuntu (general purpose), Kali Linux (security testing), and Fedora (developer-focused).",
+      relevance: "In cybersecurity, Linux runs most servers and cloud infrastructure and hosts many defensive and offensive tools, so shell and filesystem skills carry across the field.",
+      related: ["Linux permissions", "Linux commands", "Linux processes", "Linux networking"],
       sources: ["Linux Learning — Linux for Cybersecurity Beginners"],
     },
   },
@@ -127,6 +136,9 @@ const courseAnswers: Array<{ matches: (question: string) => boolean; answer: Cou
       title: "Linux permissions and least privilege",
       simple: "Linux `rwx` permissions control who can read, write, or execute a file. Least privilege means granting only the access needed for a task.",
       technical: "The course groups access by owner, group, and others. It identifies `chmod` as the command for changing file permissions and access rules; users and groups help define who receives access.",
+      example: "`chmod 640 notes.txt` gives the owner read/write, the group read-only, and others no access.",
+      relevance: "Correct permissions stop one compromised account or service from reading or changing files it should never touch.",
+      related: ["chown and umask", "SUID, SGID, and the sticky bit", "Linux users and groups"],
       sources: ["Linux Learning — Why it matters: Permissions", "Linux Learning — Why it matters: Users and groups", "Linux Learning — Command: chmod"],
       diagram: diagramLibrary.linux,
     },
@@ -302,15 +314,32 @@ const makeAssistantReply = (prompt: string, mode: string) => {
     ? matched.answer.technical
     : `${matched.answer.technical}\n\n${mode === "Expert" ? "Expert focus: verify assumptions against the system’s configuration and document the relevant defensive controls." : mode === "Technical" ? "Technical focus: relate the behavior to its protocol, access boundary, and defensive control." : "Keep in mind that the exact behavior can depend on system configuration."}`;
 
+  const sections = [
+    `## Simple explanation\n${matched.answer.simple}`,
+    matched.answer.example ? `## Example\n${matched.answer.example}` : "",
+    matched.answer.relevance ? `## Why it matters in cybersecurity\n${matched.answer.relevance}` : "",
+    `## Technical detail\n${depth}`,
+    `## Course source\n${matched.answer.sources.map((source) => `- ${source}`).join("\n")}`,
+    matched.answer.related?.length ? `## Optional next topics\nIf you want, I can also explain: ${matched.answer.related.join(", ")}.` : "",
+  ].filter(Boolean);
+
   return {
     title: matched.answer.title,
-    body: `## Simple explanation\n${matched.answer.simple}\n\n## Technical detail\n${depth}\n\n## Course source\n${matched.answer.sources.map((source) => `- ${source}`).join("\n")}`,
+    body: sections.join("\n\n"),
     diagram: matched.answer.diagram,
   };
 };
 
-const isExplicitNoteRequest = (prompt: string) => /\b(?:save|add|put|remember)\b/i.test(prompt)
-  && /\b(?:notes?|study note|this explanation)\b/i.test(prompt);
+// SAVE_NOTE intent: notes are created only when the user explicitly asks to store
+// a note. A general question such as "What is Linux?" or "Explain chmod." must never
+// match this intent.
+const SAVE_NOTE_INTENT = {
+  wantsToSave: /\b(?:save|add|put|remember|store|write)\b/i,
+  mentionsNote: /\b(?:notes?|study note|this explanation|this answer)\b/i,
+};
+
+const isExplicitNoteRequest = (prompt: string) =>
+  SAVE_NOTE_INTENT.wantsToSave.test(prompt) && SAVE_NOTE_INTENT.mentionsNote.test(prompt);
 
 const getNoteCategory = (text: string) => {
   const category = text.match(/\b(linux|networking|cybersecurity|web security|identity|security)\s+notes?\b/i)?.[1];

@@ -58,6 +58,14 @@ export default function LinuxPage() {
               <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">{activeModule.title}</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">{activeModule.summary}</h2>
               <div className="mt-4 flex flex-wrap gap-2">{activeModule.topics.map((topic) => <span key={topic} className="rounded-full border border-white/10 bg-[#0b1015] px-3 py-1.5 text-xs text-slate-300">{topic}</span>)}</div>
+              {activeModule.objectives && activeModule.objectives.length > 0 && (
+                <div className="mt-5 rounded-2xl border border-emerald-300/15 bg-emerald-300/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Learning objectives</p>
+                  <ul className="mt-3 space-y-2">
+                    {activeModule.objectives.map((objective) => <li key={objective} className="flex gap-2 text-sm leading-6 text-slate-200"><span aria-hidden="true" className="text-emerald-300">›</span><span>{objective}</span></li>)}
+                  </ul>
+                </div>
+              )}
               <div className="mt-6 space-y-4">{activeModule.notes.map((note, index) => <article key={note} className="flex gap-3 border-t border-white/10 pt-4 first:border-0 first:pt-0"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-emerald-300/20 bg-emerald-300/5 text-[10px] text-emerald-200">{String(index + 1).padStart(2, "0")}</span><p className="text-sm leading-7 text-slate-300">{note}</p></article>)}</div>
               <section className="mt-7 border-t border-white/10 pt-5">
                 <div className="mb-3">
@@ -68,6 +76,17 @@ export default function LinuxPage() {
                   {activeModule.codeExamples.map((example) => <CodeBlock key={example.command} label={example.label} code={example.command} />)}
                 </div>
               </section>
+              {activeModule.challenge && (
+                <section className="mt-7 border-t border-white/10 pt-5">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#f4c65a]">Challenge</p>
+                  <h3 className="mt-1 text-lg font-semibold text-white">Try it in the simulator</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{activeModule.challenge.prompt}</p>
+                  <details className="mt-3 rounded-xl border border-white/10 bg-[#0b1015] p-3">
+                    <summary className="cursor-pointer text-xs font-medium text-[#f7d97d]">Show solution</summary>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">{activeModule.challenge.solution}</p>
+                  </details>
+                </section>
+              )}
             </section>
 
             <LinuxModuleAssessment key={activeModule.id} module={activeModule} />

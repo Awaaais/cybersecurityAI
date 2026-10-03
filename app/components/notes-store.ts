@@ -43,6 +43,14 @@ export const saveNote = (email: string, note: Omit<SavedNote, "id" | "createdAt"
   window.dispatchEvent(new Event(NOTES_CHANGED));
 };
 
+export const deleteNote = (email: string, id: string) => {
+  if (typeof window === "undefined" || !email) return;
+  const existing = JSON.parse(readNotesSnapshot(email)) as SavedNote[];
+  const next = existing.filter((note) => note.id !== id);
+  window.localStorage.setItem(getStorageKey(email), JSON.stringify(next));
+  window.dispatchEvent(new Event(NOTES_CHANGED));
+};
+
 export const useSavedNotes = (email: string) => {
   const snapshot = useSyncExternalStore(subscribeToNotes, () => readNotesSnapshot(email), () => "[]");
   try {

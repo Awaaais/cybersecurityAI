@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "../components/auth-panel";
-import { useSavedNotes } from "../components/notes-store";
+import { deleteNote, useSavedNotes } from "../components/notes-store";
 
 const notes = [
   { title: "CIA Triad", category: "Foundations", text: "Confidentiality, integrity, and availability define the core goals of information security.", example: "A private health record needs confidentiality; an accurate payment record needs integrity; an emergency service needs availability.", defense: "Choose controls by the goal at risk: access control, change validation, or resilient recovery.", source: "Course note: CIA Triad" },
@@ -22,20 +22,13 @@ export default function NotesPage() {
   const [category, setCategory] = useState("All");
   const { auth } = useAuth();
   const savedNotes = useSavedNotes(auth.isLoggedIn ? auth.email : "");
-  const allNotes = useMemo(() => [...savedNotes.map((note) => ({
-    title: note.title,
-    category: note.category,
-    text: note.content,
-    example: "Saved from TeKAI",
-    defense: "Personal study note",
-    source: `Saved ${new Date(note.createdAt).toLocaleString()}`,
-  })), ...notes], [savedNotes]);
-  const categories = ["All", ...new Set(allNotes.map((note) => note.category))];
-  const visibleNotes = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return allNotes.filter((note) => (category === "All" || note.category === category)
-      && `${note.title} ${note.text} ${note.example} ${note.defense}`.toLowerCase().includes(query));
-  }, [allNotes, category, search]);
+  const categories = ["All", ...new Set(notes.map((note) => note.category))];
+  const query = search.trim().toLowerCase();
+  const visibleNotes = useMemo(() => notes.filter((note) => (category === "All" || note.category === category)
+    && `${note.title} ${note.text} ${note.example} ${note.defense}`.toLowerCase().includes(query)), [category, query]);
+  const visibleSavedNotes = useMemo(() => savedNotes.filter((note) =>
+    (category === "All" || note.category === category)
+    && `${note.title} ${note.content} ${note.category}`.toLowerCase().includes(query)), [savedNotes, category, query]);
 
   return (
     <main className="min-h-screen bg-[#070b10] px-4 py-8 text-slate-100 md:px-8">
@@ -60,6 +53,27 @@ export default function NotesPage() {
           </div>
           <p className="mt-3 text-xs text-slate-500">{visibleNotes.length} {visibleNotes.length === 1 ? "note" : "notes"}</p>
         </section>
+
+        {auth.isLoggedIn && savedNotes.length > 0 && (
+          <section className="mb-6 rounded-2xl border border-[#f4c65a]/20 bg-[#11151b] p-4 sm:p-5">
+            <p className="text-xs uppercase tracking-[0.22em] text-[#f4c65a]">Your saved notes · {savedNotes.length}</p>
+            {visibleSavedNotes.length === 0
+              ? <p className="mt-3 text-sm text-slate-400">No saved notes match that search.</p>
+              : <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {visibleSavedNotes.map((note) => (
+                    <article key={note.id} className="flex flex-col rounded-2xl border border-[#f4c65a]/15 bg-[#0d1217] p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-[#f7d97d]">{note.category}</p>
+                        <button type="button" onClick={() => deleteNote(auth.email, note.id)} className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] text-slate-400 transition hover:border-rose-300/30 hover:text-rose-200">Delete</button>
+                      </div>
+                      <h2 className="mt-3 text-lg font-semibold text-white">{note.title}</h2>
+                      <div className="prose prose-invert mt-2 max-w-none flex-1 text-sm leading-6 text-slate-300"><ReactMarkdown>{note.content}</ReactMarkdown></div>
+                      <p className="mt-4 border-t border-white/10 pt-3 text-[10px] uppercase tracking-[0.16em] text-slate-500">Saved {new Date(note.createdAt).toLocaleString()} · {auth.name || auth.email}</p>
+                    </article>
+                  ))}
+                </div>}
+          </section>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleNotes.map((note) => (

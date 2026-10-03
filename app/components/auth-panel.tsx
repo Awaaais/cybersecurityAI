@@ -151,6 +151,10 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
       setFormError("Complete all required fields to continue.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountEmail)) {
+      setFormError("Enter a valid email address, for example name@example.com.");
+      return;
+    }
     if (mode === "signup" && name.trim().length < 2) {
       setFormError("Enter a name with at least 2 characters.");
       return;
@@ -283,7 +287,8 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-xl bg-[#f4c65a] px-4 py-3 text-sm font-semibold text-[#11151b] transition hover:bg-[#f7d97d]"
+          aria-busy={isSubmitting}
+          className="w-full rounded-xl bg-[#f4c65a] px-4 py-3 text-sm font-semibold text-[#11151b] transition hover:bg-[#f7d97d] disabled:cursor-wait disabled:opacity-70"
         >
           {isSubmitting ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
         </button>

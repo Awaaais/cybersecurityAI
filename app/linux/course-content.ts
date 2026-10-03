@@ -23,10 +23,12 @@ export type LinuxModule = {
   title: string;
   summary: string;
   topics: string[];
+  objectives?: string[];
   notes: string[];
   codeExamples: LinuxCodeExample[];
   quiz: LinuxQuizQuestion[];
   lab: LinuxLabAssignment;
+  challenge?: { prompt: string; solution: string };
 };
 
 export const linuxModules: LinuxModule[] = [
@@ -381,4 +383,117 @@ export const linuxModules: LinuxModule[] = [
       hint: "Run `env`. Values are fixed fixtures and do not expose the browser or host environment.",
     },
   },
+  {
+    id: "text-toolkit",
+    title: "Module 13: Text Processing Toolkit",
+    summary: "Filter, sort, count, and reshape text streams with small composable tools.",
+    topics: ["grep patterns", "sort and uniq", "cut field extraction", "awk and sed edits"],
+    objectives: [
+      "Search a file for matching lines with grep.",
+      "Sort output and count duplicates with sort and uniq.",
+      "Extract a single field from each line with cut.",
+    ],
+    codeExamples: [
+      { label: "Find failed sign-in attempts", command: "grep Failed /var/log/auth.log" },
+      { label: "Sort the log lines", command: "sort /var/log/auth.log" },
+      { label: "Show the first field of each line", command: "cut -d ' ' -f 1 /var/log/auth.log" },
+      { label: "Replace text with sed", command: "sed 's/Failed/BLOCKED/' /var/log/auth.log" },
+    ],
+    notes: [
+      "`grep pattern file` prints the lines that contain a pattern; add `-i` for a case-insensitive match and `-r` to search a directory tree. Piping several filters together is how analysts reduce a large log to the few lines that matter.",
+      "`sort` orders lines and `uniq` removes adjacent duplicates; because `uniq` only compares neighbouring lines, sort first when you want a true count. `uniq -c` prefixes each unique line with its count.",
+      "`cut -d ' ' -f 1` splits each line on the space delimiter and prints the first field. `awk` and `sed` go further: `awk` selects and reshapes columns, while `sed 's/old/new/'` performs a stream edit without opening an editor.",
+      "Text processing turns raw logs into evidence. Confirm you are authorized to read a given log, and treat the output as sensitive.",
+    ],
+    quiz: [
+      { question: "Why sort before running uniq?", options: ["uniq only removes adjacent duplicates", "uniq changes permissions", "sort encrypts the file", "uniq requires a network connection"], answer: 0, explanation: "uniq compares neighbouring lines, so identical lines must be adjacent to be counted or removed." },
+      { question: "What does `cut -d ' ' -f 1` do?", options: ["Prints the first space-delimited field of each line", "Deletes the file", "Counts the lines", "Changes the file owner"], answer: 0, explanation: "cut splits each line by the delimiter and prints the requested field." },
+    ],
+    lab: {
+      title: "Find failed logins in the authentication log",
+      instructions: "Use grep to print only the lines of `/var/log/auth.log` that contain the word `Failed`.",
+      expectedCommand: "grep Failed /var/log/auth.log",
+      expectedOutput: "Failed password for learner",
+      hint: "Run `grep Failed /var/log/auth.log`. Matching is case-sensitive by default.",
+    },
+    challenge: {
+      prompt: "Challenge: pipe the log through sort and uniq -c to count how many repeated line patterns appear.",
+      solution: "Run `sort /var/log/auth.log | uniq -c`. The simulator runs the pipeline on the virtual file only and prints each unique adjacent line with its count.",
+    },
+  },
+  {
+    id: "ssh-remote",
+    title: "Module 14: SSH & Remote Administration",
+    summary: "Understand secure remote access, host verification, and key-based authentication.",
+    topics: ["SSH protocol", "Host keys", "Key-based auth", "Remote administration safety"],
+    objectives: [
+      "Explain what SSH protects and how a session is established.",
+      "Recognize why host keys and private keys must be protected.",
+      "Simulate a connection to an isolated documentation host.",
+    ],
+    codeExamples: [
+      { label: "Connect to a simulated host", command: "ssh learner@192.0.2.20" },
+      { label: "Inspect scheduled jobs", command: "crontab -l" },
+      { label: "Read the service logs", command: "journalctl -u sshd" },
+    ],
+    notes: [
+      "SSH (Secure Shell) encrypts a command-line session between a client and a server. The client first verifies the server's host key, then authenticates the user, typically with a public/private key pair rather than a password.",
+      "A private key is a secret: protect it with a passphrase and correct file permissions, and never copy it to an untrusted machine. Host-key warnings can indicate a changed server or an interception attempt and should be investigated, not ignored.",
+      "Remote administration is powerful, so follow least privilege: use named accounts, restrict which users may log in, disable direct root logins, and monitor authentication logs for unexpected activity.",
+      "This module connects only to the isolated documentation addresses 192.0.2.20 and 192.0.2.53. No real network traffic is sent.",
+    ],
+    quiz: [
+      { question: "What does the SSH client verify first?", options: ["The server's host key", "The user's birthday", "The disk size", "The firewall vendor"], answer: 0, explanation: "The client checks the host key before authentication to reduce the chance of connecting to an impersonated server." },
+      { question: "Why protect an SSH private key?", options: ["It proves your identity", "It stores your files", "It blocks the firewall", "It speeds up the network"], answer: 0, explanation: "Anyone with the private key can authenticate as you, so it must be kept secret." },
+    ],
+    lab: {
+      title: "Simulate an SSH connection",
+      instructions: "Connect the learner user to the isolated documentation host 192.0.2.20.",
+      expectedCommand: "ssh learner@192.0.2.20",
+      expectedOutput: "192.0.2.20",
+      hint: "Run `ssh learner@192.0.2.20`. The simulator prints a connection notice and sends no packets.",
+    },
+    challenge: {
+      prompt: "Challenge: run `crontab -l` and `journalctl -u sshd` to review scheduled jobs and service logs.",
+      solution: "Both commands return fixed simulator output describing scheduled jobs and the sshd service, illustrating where an administrator looks for changes.",
+    },
+  },
+
+  {
+    id: "system-health",
+    title: "Module 15: System Health & Troubleshooting",
+    summary: "Check disk, memory, and load, and reason about a basic Linux incident.",
+    topics: ["Disk usage with df", "Memory with free", "Load with uptime", "A troubleshooting method"],
+    objectives: [
+      "Read disk, memory, and load summaries.",
+      "Follow a simple, reversible troubleshooting order.",
+      "Recognize output that points to a resource problem.",
+    ],
+    codeExamples: [
+      { label: "Check disk usage", command: "df -h" },
+      { label: "Check memory usage", command: "free -h" },
+      { label: "Check load and uptime", command: "uptime" },
+    ],
+    notes: [
+      "`df -h` reports filesystem capacity and free space; a filesystem at 100% is a common cause of failing services. `free -h` summarizes memory and swap, and `uptime` shows system load averages over 1, 5, and 15 minutes.",
+      "A careful troubleshooting order is: reproduce the problem, gather evidence from logs and resource metrics, form one hypothesis, make one reversible change, and verify. Document each step so the change can be undone.",
+      "Load averages above the number of CPU cores can indicate contention. Combine metrics with logs rather than guessing, and confirm that a fix actually restored service.",
+    ],
+    quiz: [
+      { question: "Which command summarizes disk capacity and free space?", options: ["df", "ping", "cd", "sed"], answer: 0, explanation: "df reports filesystem size, used, and available space." },
+      { question: "What is a safe first troubleshooting step?", options: ["Gather evidence and reproduce the problem", "Reinstall the operating system", "Delete all logs", "Disable the firewall"], answer: 0, explanation: "Collecting evidence and reproducing the issue prevents guesswork and unnecessary changes." },
+    ],
+    lab: {
+      title: "Read the system load",
+      instructions: "Print the system uptime and its load averages.",
+      expectedCommand: "uptime",
+      expectedOutput: "load average",
+      hint: "Run `uptime`. The simulator returns a fixed summary including load averages.",
+    },
+    challenge: {
+      prompt: "Challenge: check `df -h` and `free -h`, then decide which resource a failing web server would most likely exhaust first.",
+      solution: "Disk fills gradually and often causes writes and logs to fail first, while memory pressure triggers the out-of-memory killer. Real answers depend on the system, so confirm with metrics and logs.",
+    },
+  },
+
 ];

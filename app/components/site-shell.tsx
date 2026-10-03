@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AuthPanel, useAuth } from "./auth-panel";
 
 const navigation = [
@@ -18,8 +19,15 @@ const navigation = [
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const { auth, signOut } = useAuth();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+
+  const handleSignOut = () => {
+    signOut();
+    setMobileOpen(false);
+    router.push("/");
+  };
 
   useEffect(() => {
     const onHash = () => setMobileOpen(false);
@@ -69,7 +77,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
                 <span className="text-sm text-slate-200">{auth.name}</span>
                 <button
                   type="button"
-                  onClick={signOut}
+                  onClick={handleSignOut}
                   className="rounded-full border border-white/10 bg-[#151c22] px-3 py-2 text-sm text-slate-200 hover:border-white/20"
                 >
                   Sign out
@@ -114,7 +122,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
                   TeKAI
                 </Link>
                 {auth.isLoggedIn ? (
-                  <button type="button" onClick={signOut} className="flex-1 rounded-xl border border-white/10 bg-[#151c22] px-3 py-2 text-sm text-slate-200">
+                  <button type="button" onClick={handleSignOut} className="flex-1 rounded-xl border border-white/10 bg-[#151c22] px-3 py-2 text-sm text-slate-200">
                     Sign out
                   </button>
                 ) : (

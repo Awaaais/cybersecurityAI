@@ -27,33 +27,43 @@ function SubscriptionCard({
   onSelect: () => void;
 }) {
   const price = billingCycle === "monthly" ? plan.monthlyPrice : plan.yearlyPrice;
-  const period = price.startsWith("KSh") ? (plan.id === "free" ? "" : billingCycle === "monthly" ? "/ month" : "/ year") : "";
+  const isPaid = plan.id !== "free" && price.startsWith("KSh");
+  const period = isPaid ? (billingCycle === "monthly" ? "per month" : "per year") : plan.id === "free" ? "always free" : "";
+  const cta = current ? "Your current plan" : !isLoggedIn ? "Sign in to select" : plan.id === "free" ? "Switch to Basic" : `Preview ${plan.name}`;
 
   return (
-    <article className={`relative flex min-h-full flex-col rounded-2xl border bg-white/[0.035] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-[#f4c65a]/40 hover:shadow-[0_24px_60px_rgba(244,198,90,0.08)] ${plan.id === "premium-gold" ? "border-[#f4c65a]/35" : "border-white/10"}`}>
-      <div className="flex items-start justify-between gap-3">
+    <article
+      className={`group relative flex min-h-full flex-col overflow-hidden rounded-3xl border bg-white/[0.04] p-5 backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:border-[#f4c65a]/45 hover:shadow-[0_28px_70px_rgba(244,198,90,0.12)] sm:p-6 ${
+        plan.highlight ? "border-[#f4c65a]/45 shadow-[0_24px_60px_rgba(244,198,90,0.10)]" : "border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
+      } ${current ? "ring-1 ring-[#f4c65a]/40" : ""}`}
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 h-44 w-44 -translate-x-1/2 rounded-full bg-[#f4c65a]/10 opacity-0 blur-3xl transition duration-500 group-hover:opacity-100" />
+      <div className="relative flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-[#f4c65a]">{plan.id === "free" ? "Start here" : plan.id === "platinum" ? "Most popular" : "Advanced"}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#f4c65a]">{plan.badge}</p>
           <h3 className="mt-2 text-xl font-semibold text-white">{plan.name}</h3>
         </div>
         {current && <span className="shrink-0 rounded-full border border-[#f4c65a]/30 bg-[#f4c65a]/10 px-2.5 py-1 text-[10px] font-medium text-[#f7d97d]">Current plan</span>}
       </div>
-      <p className="mt-3 min-h-12 text-sm leading-6 text-slate-300">{plan.description}</p>
-      <div className="mt-5 min-h-14">
-        <p className={`text-xl font-semibold ${price.startsWith("KSh") ? "text-white" : "text-[#f7d97d]"}`}>{price}</p>
-        {period && <p className="mt-1 text-xs text-slate-500">{period} · local demo pricing</p>}
+      <p className="relative mt-3 min-h-12 text-sm leading-6 text-slate-300">{plan.description}</p>
+      <div className="relative mt-5 min-h-16">
+        <p className={`text-3xl font-semibold ${price.startsWith("KSh") ? "text-white" : "text-[#f7d97d]"}`}>{price}</p>
+        {period && <p className="mt-1 text-xs text-slate-500">{period}{isPaid ? " · local demo pricing" : ""}</p>}
       </div>
-      <ul className="mt-5 flex-1 space-y-3 border-t border-white/10 pt-4 text-sm leading-5 text-slate-200">
+      <ul className="relative mt-5 space-y-3 border-t border-white/10 pt-4 text-sm leading-5 text-slate-200">
         {plan.features.map((feature) => <li key={feature} className="flex gap-2"><span aria-hidden="true" className="text-[#f4c65a]">+</span><span>{feature}</span></li>)}
       </ul>
-      <p className="mt-5 min-h-10 text-xs leading-5 text-slate-500">{plan.usageLimit}</p>
+      <div className="relative mt-5 flex-1 space-y-2 border-t border-white/10 pt-4">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Usage limits</p>
+        {plan.limits.map((limit) => <p key={limit} className="flex gap-2 text-xs leading-5 text-slate-400"><span aria-hidden="true" className="text-slate-600">–</span><span>{limit}</span></p>)}
+      </div>
       <button
         type="button"
         onClick={onSelect}
         disabled={current}
-        className={`mt-4 min-h-11 w-full rounded-xl border px-4 py-2.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-60 ${plan.id === "free" ? "border-white/15 bg-white/5 text-slate-100 hover:border-white/30" : "border-[#f4c65a]/50 bg-[#f4c65a] text-[#11151b] hover:bg-[#f7d97d]"}`}
+        className={`relative mt-5 min-h-11 w-full rounded-xl border px-4 py-2.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-70 ${plan.id === "free" ? "border-white/15 bg-white/5 text-slate-100 hover:border-white/30 hover:bg-white/10" : "border-[#f4c65a]/50 bg-[#f4c65a] text-[#11151b] hover:bg-[#f7d97d]"}`}
       >
-        {current ? "Current plan" : !isLoggedIn ? "Sign in to select" : plan.id === "free" ? "Switch to Basic" : `Preview ${plan.name}`}
+        {cta}
       </button>
     </article>
   );
