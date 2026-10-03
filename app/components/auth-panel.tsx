@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 export type AuthState = {
   email: string;
@@ -136,19 +136,32 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionLock = useRef(false);
   const { saveAuth } = useAuth();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const accountEmail = email.trim().toLowerCase();
 
-    if (!accountEmail || !password.trim() || (mode === "signup" && !name.trim())) {
+    if (submissionLock.current) return;
+    if (!accountEmail || !password || (mode === "signup" && !name.trim())) {
+      setFormError("Complete all required fields to continue.");
+      return;
+    }
+    if (mode === "signup" && name.trim().length < 2) {
+      setFormError("Enter a name with at least 2 characters.");
+      return;
+    }
+    if (mode === "signup" && password.length < 8) {
+      setFormError("Use a password with at least 8 characters.");
       return;
     }
 
     setFormError("");
+    submissionLock.current = true;
     setIsSubmitting(true);
     try {
       const accounts = readAccounts();
@@ -183,6 +196,7 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
     } catch {
       setFormError("Could not access account storage in this browser. Please try again.");
     } finally {
+      submissionLock.current = false;
       setIsSubmitting(false);
     }
   };
@@ -199,9 +213,12 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
         <button
           type="button"
           onClick={() => {
+            if (isSubmitting) return;
             setMode(mode === "login" ? "signup" : "login");
             setFormError("");
+            setPassword("");
           }}
+          disabled={isSubmitting}
           className="rounded-full border border-white/10 bg-[#151c22] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300"
         >
           {mode === "login" ? "Sign up" : "Login"}
@@ -216,6 +233,7 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
               value={name}
               onChange={(event) => setName(event.target.value)}
               required
+              autoComplete="name"
               className="w-full rounded-xl border border-white/10 bg-[#0d1217] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#f4c65a]/40 focus:outline-none"
               placeholder="Your name"
             />
@@ -229,6 +247,7 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
+            autoComplete={mode === "signup" ? "email" : "username"}
             className="w-full rounded-xl border border-white/10 bg-[#0d1217] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#f4c65a]/40 focus:outline-none"
             placeholder="name@example.com"
           />
@@ -236,14 +255,27 @@ export function AuthPanel({ onSuccess }: { onSuccess?: () => void }) {
 
         <label className="block text-sm text-slate-200">
           <span className="mb-2 block text-xs uppercase tracking-[0.18em] text-slate-400">Password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            className="w-full rounded-xl border border-white/10 bg-[#0d1217] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#f4c65a]/40 focus:outline-none"
-            placeholder="••••••••"
-          />
+          <span className="flex rounded-xl border border-white/10 bg-[#0d1217] focus-within:border-[#f4c65a]/40">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              minLength={mode === "signup" ? 8 : undefined}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              className="min-w-0 flex-1 rounded-l-xl bg-transparent px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:outline-none"
+              placeholder="Enter your password"
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((visible) => !visible)}
+              className="shrink-0 rounded-r-xl px-3 text-xs font-medium text-[#f7d97d] hover:bg-white/5"
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </span>
         </label>
 
         {formError && <p role="alert" className="text-sm text-rose-300">{formError}</p>}

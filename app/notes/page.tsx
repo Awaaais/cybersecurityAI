@@ -1,6 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { useAuth } from "../components/auth-panel";
+import { useSavedNotes } from "../components/notes-store";
 
 const notes = [
   { title: "CIA Triad", category: "Foundations", text: "Confidentiality, integrity, and availability define the core goals of information security.", example: "A private health record needs confidentiality; an accurate payment record needs integrity; an emergency service needs availability.", defense: "Choose controls by the goal at risk: access control, change validation, or resilient recovery.", source: "Course note: CIA Triad" },
@@ -17,18 +20,28 @@ const notes = [
 export default function NotesPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
-  const categories = ["All", ...new Set(notes.map((note) => note.category))];
+  const { auth } = useAuth();
+  const savedNotes = useSavedNotes(auth.isLoggedIn ? auth.email : "");
+  const allNotes = useMemo(() => [...savedNotes.map((note) => ({
+    title: note.title,
+    category: note.category,
+    text: note.content,
+    example: "Saved from TeKAI",
+    defense: "Personal study note",
+    source: `Saved ${new Date(note.createdAt).toLocaleString()}`,
+  })), ...notes], [savedNotes]);
+  const categories = ["All", ...new Set(allNotes.map((note) => note.category))];
   const visibleNotes = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return notes.filter((note) => (category === "All" || note.category === category)
+    return allNotes.filter((note) => (category === "All" || note.category === category)
       && `${note.title} ${note.text} ${note.example} ${note.defense}`.toLowerCase().includes(query));
-  }, [category, search]);
+  }, [allNotes, category, search]);
 
   return (
     <main className="min-h-screen bg-[#070b10] px-4 py-8 text-slate-100 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 rounded-3xl border border-[#f4c65a]/20 bg-[#11151b] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-          <p className="text-xs uppercase tracking-[0.28em] text-[#f4c65a]">Knowledge base</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-[#f4c65a]">Knowledge base · {savedNotes.length} saved</p>
           <h1 className="mt-3 text-4xl font-semibold text-white">Cybersecurity Notes</h1>
           <p className="mt-3 max-w-3xl text-slate-300">
             Build a strong foundation by connecting definitions to real-world security concepts, defensive strategies, and attacker tradecraft.
@@ -56,7 +69,7 @@ export default function NotesPage() {
                 <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{note.source}</span>
               </div>
               <h2 className="mt-3 text-xl font-semibold text-white">{note.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{note.text}</p>
+              <div className="prose prose-invert mt-2 max-w-none text-sm leading-6 text-slate-300"><ReactMarkdown>{note.text}</ReactMarkdown></div>
               <div className="mt-5 space-y-4 border-t border-white/10 pt-4">
                 <div><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Example</p><p className="mt-1 text-sm leading-6 text-slate-300">{note.example}</p></div>
                 <div><p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">Defensive takeaway</p><p className="mt-1 text-sm leading-6 text-slate-300">{note.defense}</p></div>

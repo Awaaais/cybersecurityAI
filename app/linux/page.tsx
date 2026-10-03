@@ -5,23 +5,14 @@ import { useState } from "react";
 import { LinuxModuleAssessment } from "../components/linux-module-assessment";
 import { MockLinuxTerminal } from "../components/mock-linux-terminal";
 import { PremiumGate } from "../components/subscription-ui";
+import { CodeBlock } from "../components/code-block";
 import { linuxModules } from "./course-content";
 import { useRuntimeRecord } from "./runtime-store";
 
 export default function LinuxPage() {
   const [activeModuleId, setActiveModuleId] = useState(linuxModules[0].id);
-  const [copyStatus, setCopyStatus] = useState<{ command: string; message: string } | null>(null);
   const activeModule = linuxModules.find((module) => module.id === activeModuleId) ?? linuxModules[0];
   const runtime = useRuntimeRecord();
-
-  const copyCommand = async (command: string) => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopyStatus({ command, message: "Copied" });
-    } catch {
-      setCopyStatus({ command, message: "Clipboard unavailable" });
-    }
-  };
 
   return (
     <main className="min-h-screen bg-[#070b10] px-4 py-8 text-slate-100 md:px-8">
@@ -29,7 +20,7 @@ export default function LinuxPage() {
         <div className="mb-8 rounded-3xl border border-[#f4c65a]/20 bg-[#11151b] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-emerald-300">Linux learning path · 6 modules</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-emerald-300">Linux learning path · {linuxModules.length} modules</p>
               <h1 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">Linux for Cybersecurity</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">Learn filesystem operations, text pipelines, identity controls, process diagnostics, and network inspection through course notes, module checks, and an isolated command simulator.</p>
             </div>
@@ -74,15 +65,7 @@ export default function LinuxPage() {
                   <h3 className="mt-1 text-lg font-semibold text-white">Examples for this module</h3>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {activeModule.codeExamples.map((example) => <article key={example.command} className="min-w-0 rounded-xl border border-white/10 bg-[#0b1015] p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-xs leading-5 text-slate-400">{example.label}</p>
-                      <button type="button" onClick={() => void copyCommand(example.command)} aria-label={`Copy command: ${example.command}`} className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-emerald-200 transition hover:border-emerald-300/30 hover:bg-emerald-300/5">
-                        {copyStatus?.command === example.command ? copyStatus.message : "Copy"}
-                      </button>
-                    </div>
-                    <pre className="mt-2 overflow-x-auto rounded-lg bg-[#050809] p-3 text-xs leading-5 text-[#c4f1da]"><code>{example.command}</code></pre>
-                  </article>)}
+                  {activeModule.codeExamples.map((example) => <CodeBlock key={example.command} label={example.label} code={example.command} />)}
                 </div>
               </section>
             </section>

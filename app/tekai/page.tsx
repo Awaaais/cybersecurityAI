@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useRuntimeRecord } from "../linux/runtime-store";
-import { useAuth } from "../components/auth-panel";
+import { readProgress, saveProgress, useAuth } from "../components/auth-panel";
 import { hasPremiumAccess, useSubscription } from "../components/subscription-store";
+import { saveNote } from "../components/notes-store";
 
 const topics = [
   "Networking and OSI",
@@ -53,12 +54,21 @@ interface CourseAnswer {
 
 const courseAnswers: Array<{ matches: (question: string) => boolean; answer: CourseAnswer }> = [
   {
-    matches: (question) => /\b(commands?|command line|shell commands?)\b|\b(pwd|ls|cd|mkdir|ps|ip|ssh|chmod)\b/.test(question),
+    matches: (question) => /\b(commands?|command line|shell commands?)\b|\b(pwd|ls|cd|mkdir|ps|ip|chmod)\b/.test(question),
     answer: {
       title: "Linux command reference",
       simple: "These course commands help navigate directories, inspect processes or networking, and manage permissions. Use them only on systems where you have permission.",
       technical: "The course lists these commands:\n\n```text\npwd  ls  cd  mkdir  chmod  ps  ip  ssh\n```\n\n- `pwd`: show the current working directory.\n- `ls`: list directory contents.\n- `cd`: move between directories.\n- `mkdir`: create a directory.\n- `chmod`: change file permissions and access rules.\n- `ps`: display running processes.\n- `ip`: inspect network interfaces and addresses.\n- `ssh`: connect securely to another system.",
       sources: ["Linux Learning — Commands"],
+    },
+  },
+  {
+    matches: (question) => /\b(ssh|secure shell)\b/.test(question),
+    answer: {
+      title: "SSH (Secure Shell)",
+      simple: "SSH is a protocol for securely connecting to and operating a remote computer over an untrusted network. It encrypts the connection and commonly uses keys or passwords for authentication.",
+      technical: "An SSH client negotiates an encrypted transport with an SSH server, then authenticates the user before opening a shell or forwarding an approved service. Verify host keys and protect private keys; this answer describes the protocol, not a command to access a system.",
+      sources: ["Linux Learning — SSH", "Networking Fundamentals — Secure protocols"],
     },
   },
   {
@@ -107,12 +117,12 @@ const courseAnswers: Array<{ matches: (question: string) => boolean; answer: Cou
     answer: {
       title: "What is Linux?",
       simple: "The CyberTeKa course describes Linux as a foundation for servers, cloud workloads, security tools, and defensive operations. It gives you a shell and filesystem for working with those systems.",
-      technical: "Beyond the course: Linux is an operating system built around the Linux kernel. The kernel manages hardware resources, processes, memory, filesystems, and networking; a distribution packages the kernel with user-space tools, libraries, services, and applications. The course explores the filesystem and shell in Module 1, file permissions and identity in Module 4, and processes and networking in Modules 5–6.",
-      sources: ["Linux Learning — Linux for Cybersecurity Beginners", "Linux course — Modules 1, 4, 5, and 6"],
+      technical: "Linux is the kernel at the core of an operating system. A Linux distribution combines that kernel with system tools and applications into an installable system. Ubuntu, Kali Linux, and Fedora are examples of distributions.",
+      sources: ["Linux Learning — Linux for Cybersecurity Beginners"],
     },
   },
   {
-    matches: (question) => /\b(linux|chmod|rwx|permission|least privilege|sudo)\b/.test(question),
+    matches: (question) => /\b(chmod|rwx|permissions?|least privilege|sudo|chown|umask|suid|sgid|sticky bit)\b/.test(question),
     answer: {
       title: "Linux permissions and least privilege",
       simple: "Linux `rwx` permissions control who can read, write, or execute a file. Least privilege means granting only the access needed for a task.",
@@ -299,6 +309,17 @@ const makeAssistantReply = (prompt: string, mode: string) => {
   };
 };
 
+const isExplicitNoteRequest = (prompt: string) => /\b(?:save|add|put|remember)\b/i.test(prompt)
+  && /\b(?:notes?|study note|this explanation)\b/i.test(prompt);
+
+const getNoteCategory = (text: string) => {
+  const category = text.match(/\b(linux|networking|cybersecurity|web security|identity|security)\s+notes?\b/i)?.[1];
+  if (category) return category.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  if (/\b(linux|ssh|chmod|shell|terminal|kernel|distribution)\b/i.test(text)) return "Linux";
+  if (/\b(network|dns|tcp|udp|https|tls|ssh|ip address)\b/i.test(text)) return "Networking";
+  return "Cybersecurity";
+};
+
 const getWelcomeMessage = (): Message => ({
   role: "assistant",
   title: "What is AI?",
@@ -325,7 +346,29 @@ export default function TeKaiPage() {
     const trimmed = input.trim();
     if (!trimmed) return;
 
-    const reply = makeAssistantReply(trimmed, mode);
+    let reply: { title: string; body: string; diagram?: string };
+    if (isExplicitNoteRequest(trimmed)) {
+      const previousAnswer = [...messages].reverse().find((message) => message.role === "assistant" && message.title !== "What is AI?");
+      const customContent = trimmed.match(/:\s*([\s\S]+)$/)?.[1]?.trim();
+      if (!auth.isLoggedIn || !auth.email) {
+        reply = { title: "Sign in to save notes", body: "This is an explicit note-saving request, but notes are stored under your account on this device. Sign in first, then ask me to save it again." };
+      } else {
+        const noteToSave = customContent
+          ? { title: "TeKAI study note", content: customContent }
+          : previousAnswer;
+        if (!noteToSave) {
+          reply = { title: "Nothing to save yet", body: "Ask a question first, then tell me to save the explanation as a note." };
+        } else {
+          const { title, content } = noteToSave;
+          saveNote(auth.email, { title, content, category: getNoteCategory(`${trimmed} ${title}`) });
+          const progress = readProgress(auth.email);
+          saveProgress(auth.email, { savedNotes: progress.savedNotes + 1 });
+          reply = { title: "Note saved", body: `Saved **${title}** to your ${getNoteCategory(`${trimmed} ${title}`)} notes. You can review it in Notes.` };
+        }
+      }
+    } else {
+      reply = makeAssistantReply(trimmed, mode);
+    }
     setMessages((current) => [
       ...current,
       { role: "user", title: "You", content: trimmed },

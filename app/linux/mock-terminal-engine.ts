@@ -8,6 +8,7 @@ export type MockTerminalState = {
   modes: Record<string, string>;
   owners: Record<string, string>;
   links: Record<string, MockLink>;
+  umask: string;
   processes: MockProcess[];
   jobs: string[];
   nextPid: number;
@@ -58,6 +59,7 @@ export const createMockTerminalState = (): MockTerminalState => ({
     "/var/log/auth.log": "root:adm",
   },
   links: {},
+  umask: "0022",
   processes: [
     { pid: 1, name: "init", state: "running", user: "root" },
     { pid: 728, name: "sshd", state: "running", user: "root" },
@@ -152,8 +154,24 @@ const runSimpleCommand = (source: string, input: string, state: MockTerminalStat
         return { state, output: state.cwd };
       case "whoami":
         return { state, output: "learner" };
+      case "uname":
+        return { state, output: args.includes("-a") ? "Linux cyberteka-lab 6.8.0-virtual #1 SMP x86_64 GNU/Linux" : "Linux" };
+      case "hostname":
+        return { state, output: "cyberteka-lab" };
+      case "env":
+        return { state, output: "HOME=/home/learner\nSHELL=/bin/bash\nUSER=learner\nPATH=/usr/local/bin:/usr/bin:/bin" };
+      case "printenv": {
+        const values: Record<string, string> = { HOME: "/home/learner", SHELL: "/bin/bash", USER: "learner", PATH: "/usr/local/bin:/usr/bin:/bin" };
+        return args[0] ? { state, output: values[args[0]] ?? "" } : { state, output: Object.keys(values).join("\n") };
+      }
       case "id":
         return { state, output: "uid=1000(learner) gid=1000(learner) groups=1000(learner),27(sudo-lab-disabled)" };
+      case "umask": {
+        if (!args[0]) return { state, output: state.umask ?? "0022" };
+        if (!/^[0-7]{3,4}$/.test(args[0])) return fail("umask: expected an octal mode");
+        const umask = args[0].padStart(4, "0");
+        return { state: { ...state, umask }, output: umask };
+      }
       case "cd": {
         const destination = args[0] ? resolve(args[0]) : "/home/learner";
         if (!isDirectory(state, destination)) return fail(`cd: ${args[0] ?? "~"}: No such directory`);
@@ -258,6 +276,37 @@ const runSimpleCommand = (source: string, input: string, state: MockTerminalStat
         if (command === "tail") return { state, output: content.split("\n").slice(-count).join("\n").replace(/\n$/, "") };
         return { state, output: content.replace(/\n$/, "") };
       }
+      case "stat": {
+        const target = args.find((arg) => !arg.startsWith("-"));
+        if (!target) return fail("stat: missing file operand");
+        const path = resolve(target);
+        if (!exists(state, path)) return fail(`stat: cannot stat '${target}': No such file`);
+        const mode = state.modes[path] ?? (isDirectory(state, path) ? "755" : "644");
+        const owner = state.owners[path] ?? "learner:learner";
+        return { state, output: `  File: ${path}\n  Size: ${readFile(state, path)?.length ?? 0}\nAccess: (${mode}/-rw-------)\nUid: (${owner.split(":")[0]}) Gid: (${owner.split(":")[1]})` };
+      }
+      case "find": {
+        const root = resolve(args.find((arg) => !arg.startsWith("-")) ?? ".");
+        const nameIndex = args.indexOf("-name");
+        const name = nameIndex >= 0 ? args[nameIndex + 1] : undefined;
+        if (!isDirectory(state, root)) return fail(`find: '${root}': No such directory`);
+        const paths = [...state.directories, ...Object.keys(state.files), ...Object.keys(state.links)]
+          .filter((path) => path === root || path.startsWith(`${root.replace(/\/$/, "")}/`))
+          .filter((path) => !name || basename(path) === name)
+          .sort((a, b) => a.localeCompare(b));
+        return { state, output: paths.join("\n") };
+      }
+      case "cut": {
+        const delimiterArg = args.find((arg) => arg.startsWith("-d"));
+        const fieldArg = args.find((arg) => arg.startsWith("-f"));
+        const delimiter = delimiterArg?.slice(2) || args[args.indexOf("-d") + 1] || "\t";
+        const fieldValue = fieldArg?.slice(2) || args[args.indexOf("-f") + 1] || "1";
+        const field = Number(fieldValue);
+        if (!Number.isInteger(field) || field < 1) return fail("cut: expected a positive field number");
+        const path = args.find((arg) => !arg.startsWith("-"));
+        const content = readPaths(path ? [path] : []);
+        return { state, output: content.split("\n").filter(Boolean).map((line) => line.split(delimiter)[field - 1] ?? "").join("\n") };
+      }
       case "grep": {
         const insensitive = args.includes("-i");
         const pattern = args.find((arg) => !arg.startsWith("-"));
@@ -306,6 +355,35 @@ const runSimpleCommand = (source: string, input: string, state: MockTerminalStat
       }
       case "echo":
         return { state, output: args.join(" ") };
+      case "getent":
+      case "nslookup":
+      case "dig": {
+        const name = command === "getent" ? args.at(-1) : args.find((arg) => !arg.startsWith("-") && arg !== "hosts");
+        if (name !== "example.test") return fail(`${command}: only the fixed example.test DNS fixture is available`);
+        return { state, output: command === "getent" ? "192.0.2.80 example.test" : "Name: example.test\nAddress: 192.0.2.80\nDNS query simulated; no network request was sent." };
+      }
+      case "curl":
+      case "wget": {
+        const url = args.find((arg) => /^https?:\/\//.test(arg));
+        if (!url) return fail(`${command}: expected an https://example.test/ fixture URL`);
+        if (!/^https?:\/\/example\.test\/?$/.test(url)) return fail(`${command}: only the fixed example.test fixture is available; no network request was sent`);
+        return { state, output: "<!doctype html>\n<title>CyberTeKa network fixture</title>\n<p>Simulated response from example.test.</p>" };
+      }
+      case "systemctl": {
+        if (args[0] !== "status" || args[1] !== "sshd") return fail("systemctl: only read-only status for the mock sshd service is supported");
+        return { state, output: "sshd.service - OpenSSH server daemon\n     Loaded: loaded (virtual fixture)\n     Active: active (running) since simulated startup" };
+      }
+      case "journalctl": {
+        if (args.includes("-u") && args[args.indexOf("-u") + 1] !== "sshd") return fail("journalctl: only the mock sshd service log is available");
+        return { state, output: "Oct 02 09:14:02 cyberteka-lab sshd[728]: Server listening on 0.0.0.0 port 22.\nOct 02 09:14:12 cyberteka-lab sshd[728]: Accepted publickey for learner from 192.0.2.45." };
+      }
+      case "crontab":
+        return args.includes("-l") ? { state, output: "# Simulated learner crontab\n15 3 * * 1 /home/learner/bin/weekly-report" } : fail("crontab: only read-only listing is available in this simulator");
+      case "apt":
+      case "dnf":
+        return args.includes("list") || args.includes("installed")
+          ? { state, output: "bash (virtual)\ncoreutils (virtual)\nopenssh-client (virtual)\ngrep (virtual)" }
+          : fail(`${command}: package changes are not available in this simulator`);
       case "chmod": {
         if (args.length < 2) return fail("chmod: usage: chmod MODE FILE");
         const [mode, ...targets] = args;
