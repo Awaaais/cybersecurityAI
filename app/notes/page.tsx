@@ -1,9 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import { useAuth } from "../components/auth-panel";
 import { deleteNote, useSavedNotes } from "../components/notes-store";
+
+// Same rule as TeKAI: notes never load external images — show the reference as
+// markdown source instead, so the "stays on your machine" promise holds for
+// saved content too.
+const safeMarkdownComponents: Components = {
+  img: ({ alt, src }) => (
+    <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-400">
+      {`![${alt ?? ""}](${src ?? ""})`}
+    </code>
+  ),
+};
 
 const notes = [
   { title: "CIA Triad", category: "Foundations", text: "Confidentiality, integrity, and availability define the core goals of information security.", example: "A private health record needs confidentiality; an accurate payment record needs integrity; an emergency service needs availability.", defense: "Choose controls by the goal at risk: access control, change validation, or resilient recovery.", source: "Course note: CIA Triad" },
@@ -67,7 +78,7 @@ export default function NotesPage() {
                         <button type="button" onClick={() => deleteNote(auth.email, note.id)} className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] text-slate-400 transition hover:border-rose-300/30 hover:text-rose-200">Delete</button>
                       </div>
                       <h2 className="mt-3 text-lg font-semibold text-white">{note.title}</h2>
-                      <div className="prose prose-invert mt-2 max-w-none flex-1 text-sm leading-6 text-slate-300"><ReactMarkdown>{note.content}</ReactMarkdown></div>
+                      <div className="prose prose-invert mt-2 max-w-none flex-1 text-sm leading-6 text-slate-300"><ReactMarkdown components={safeMarkdownComponents}>{note.content}</ReactMarkdown></div>
                       <p className="mt-4 border-t border-white/10 pt-3 text-[10px] uppercase tracking-[0.16em] text-slate-500">Saved {new Date(note.createdAt).toLocaleString()} · {auth.name || auth.email}</p>
                     </article>
                   ))}
@@ -83,7 +94,7 @@ export default function NotesPage() {
                 <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{note.source}</span>
               </div>
               <h2 className="mt-3 text-xl font-semibold text-white">{note.title}</h2>
-              <div className="prose prose-invert mt-2 max-w-none text-sm leading-6 text-slate-300"><ReactMarkdown>{note.text}</ReactMarkdown></div>
+              <div className="prose prose-invert mt-2 max-w-none text-sm leading-6 text-slate-300"><ReactMarkdown components={safeMarkdownComponents}>{note.text}</ReactMarkdown></div>
               <div className="mt-5 space-y-4 border-t border-white/10 pt-4">
                 <div><p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Example</p><p className="mt-1 text-sm leading-6 text-slate-300">{note.example}</p></div>
                 <div><p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300">Defensive takeaway</p><p className="mt-1 text-sm leading-6 text-slate-300">{note.defense}</p></div>
