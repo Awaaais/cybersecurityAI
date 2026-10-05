@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import type { ReactNode } from "react";
 import { CodeBlock } from "../components/code-block";
@@ -86,11 +86,22 @@ const extractCode = (children: ReactNode): { code: string; lang: string } => {
   return { code: "", lang: "text" };
 };
 
+// TeKAI's diagrams are plain-text art inside a fenced block — no images and no
+// HTML ever (see sanitize.ts). A text block full of arrows and box-drawing
+// characters is therefore a diagram, and labelling it as one keeps the label
+// honest without adding a second rendering path: it reuses the existing
+// CodeBlock, which already shows plain text with a Copy button.
+const DIAGRAM_BLOCK = /[│┌└├┤┬┴┼▼▲◄►←→↑↓]|[-=]{2,}>|<[-=]{2,}/;
+const diagramLabel = (lang: string, code: string): string => {
+  const isPlainText = lang === "text" || lang === "ascii" || lang === "diagram";
+  return isPlainText && code.includes("\n") && DIAGRAM_BLOCK.test(code) ? "Diagram" : lang;
+};
+
 const markdownComponents: Components = {
   pre: ({ children }) => {
     const { code, lang } = extractCode(children);
     if (!code) return <pre className="overflow-x-auto rounded-xl border border-white/10 bg-[#060a0b] p-3 text-xs leading-5 text-slate-300">{children}</pre>;
-    return <CodeBlock code={code} label={lang} />;
+    return <CodeBlock code={code} label={diagramLabel(lang, code)} />;
   },
   code: ({ children }) => (
     <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[0.85em] text-[#f7d97d]">{children}</code>
@@ -181,6 +192,11 @@ function MessageBubble({ message, onRetry }: { message: ChatUIMessage; onRetry: 
     </div>
   );
 }
+
+// Memoized so a streaming answer re-renders only the bubble it is growing.
+// Without this, every flushed chunk re-parses the markdown of the whole
+// conversation, which is exactly where a low-spec machine starts to stutter.
+const MemoMessageBubble = memo(MessageBubble);
 
 export default function TeKaiPage() {
   const [mode, setMode] = useState("Beginner");
@@ -316,11 +332,16 @@ export default function TeKaiPage() {
     }
   };
 
+  // Only the most recent turns are sent: the server trims this to its own
+  // prompt budget anyway (HISTORY_CHAR_BUDGET in lib/ai/systemPrompt.ts), and a
+  // shorter request keeps the low-spec machine responsive. Follow-ups ("What
+  // about Ubuntu?", "explain that in detail", "show me a diagram") still
+  // resolve their subject from these turns.
   const buildHistory = (list: ChatUIMessage[]): ChatMessage[] =>
     list
       .filter((message) => message.id !== "welcome" && message.content.trim().length > 0 && message.status !== "error")
       .map((message) => ({ role: message.role, content: message.content }))
-      .slice(-8);
+      .slice(-6);
 
   const send = async () => {
     const trimmed = input.trim();
@@ -363,6 +384,16 @@ export default function TeKaiPage() {
     if (index < 0) return;
     await runAssistant(buildHistory(messages.slice(0, index + 1)));
   };
+
+  // Message bubbles are memoized (see MemoMessageBubble), so their props have to
+  // stay referentially stable. `retry` closes over the current message list and
+  // therefore changes on every streamed chunk; route it through a ref and hand
+  // React one stable callback instead.
+  const retryRef = useRef(retry);
+  useEffect(() => {
+    retryRef.current = retry;
+  });
+  const retryStable = useCallback(() => void retryRef.current(), []);
 
   const clearChat = () => {
     abortRef.current?.abort();
@@ -418,7 +449,7 @@ export default function TeKaiPage() {
           <section className="flex min-h-[34rem] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#11151b]">
             <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5" aria-live="polite">
               {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} onRetry={() => void retry()} />
+                <MemoMessageBubble key={message.id} message={message} onRetry={retryStable} />
               ))}
             </div>
 

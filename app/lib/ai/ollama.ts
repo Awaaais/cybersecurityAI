@@ -1,4 +1,5 @@
 import { AIProviderError } from "./errors";
+import { buildGenerationOptions, keepAliveFor } from "./generationOptions";
 import type { AIProvider, ChatMessage, ChatPolicy, ProviderStatus } from "./types";
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
@@ -28,7 +29,6 @@ export class OllamaProvider implements AIProvider {
   }
 
   private async post(messages: ChatMessage[], stream: boolean, signal: AbortSignal, policy?: ChatPolicy): Promise<Response> {
-    const maxTokens = Math.max(80, Math.min(policy?.maxTokens ?? 480, 1200));
     try {
       return await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
@@ -38,31 +38,13 @@ export class OllamaProvider implements AIProvider {
           model: this.model,
           messages,
           stream,
-          // Tuned for small local models on low-resource machines:
-          // low temperature for accuracy, small context window, and an
-          // output budget that matches the question depth.
-          options: {
-            // Diagram requests at low temperature can lock into a degenerate
-            // box-drawing loop that burns the whole output budget (each line's
-            // indent tokens differ, so the repetition penalty can't catch it).
-            // 0.5 breaks that lock while staying grounded — at 0.6 the model
-            // started inventing facts (e.g. attributing TCP to Tim Berners-Lee);
-            // prose stays at 0.1 where accuracy matters most — the lower the
-            // temperature, the less the model drifts off the asked-for fact.
-            temperature: policy?.wantsDiagram ? 0.5 : 0.1,
-            top_p: 0.9,
-            // Narrow the candidate set: with fewer plausible next tokens a small
-            // model stays on-topic and factually steadier. Diagrams need a
-            // slightly wider set so box-drawing characters stay available.
-            top_k: policy?.wantsDiagram ? 60 : 30,
-            num_ctx: 2048,
-            num_predict: maxTokens,
-            // Small models like TinyLlama can lock into a repetition loop that
-            // burns the whole output budget and leaves the answer cut
-            // mid-sentence; a repetition penalty keeps generation moving.
-            repeat_last_n: 256,
-            repeat_penalty: policy?.wantsDiagram ? 1.3 : 1.18,
-          },
+          // Keep the model loaded between questions (Ollama's own default is
+          // only 5 minutes). Re-reading 637 MB of weights from disk on this
+          // machine costs far more than anything saved inside one request.
+          keep_alive: keepAliveFor(),
+          // Sampling + context tuning lives in one dependency-free module so it
+          // can be unit-probed directly with `node --experimental-strip-types`.
+          options: buildGenerationOptions(policy),
         }),
       });
     } catch (error) {

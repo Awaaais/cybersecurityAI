@@ -2,8 +2,8 @@
 //
 // The prompt ASKS the model to follow these rules; this module ENFORCES them,
 // because a small local model cannot be trusted to comply every single time.
-// Deliberately dependency-free (zero imports) so it can be checked directly:
-//   node --experimental-strip-types filter-check.mjs
+// Deliberately dependency-free (zero imports) so it can be unit-probed directly
+// with `node --experimental-strip-types`.
 
 // TinyLlama often opens with filler ("Sure,", "Great question!") no matter how
 // the prompt words the rule, so we also strip it deterministically at the

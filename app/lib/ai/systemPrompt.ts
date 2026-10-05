@@ -8,12 +8,17 @@ import type { ChatMessage, ChatPolicy, DetailLevel } from "./types";
 
 // Tuned thresholds for a small local model on low-RAM hardware:
 //
-// - SIMPLE_PATTERN is intentionally strict (one short factual question only,
-//   ≤120 chars). Anything else falls through to the length rules below.
-// - Questions ≤12 words default to BRIEF (short question = focused answer).
+// - An explicit request always wins. "briefly" ("short answer", "in one
+//   paragraph") gives the shortest answer; "in detail" ("go deeper", "explain
+//   everything", "beginner to advanced") gives the fullest. When a message
+//   contains both, the shorter one wins — it is the cheaper and the more
+//   deliberate instruction.
+// - SIMPLE_PATTERN is intentionally strict: one short factual question only
+//   (≤120 characters, ≤27 words) → BRIEF.
 // - MODERATE_PATTERN channels "how does X work?" questions to NORMAL.
-// - Questions with 13-34 words default to NORMAL.
-// - Questions ≥35 words or with 4+ "?" segments default to DETAILED.
+// - Everything else defaults to NORMAL; questions that are clearly long or
+//   multi-part (≥45 words, 4+ "?" segments, or a two-part "explain … and how
+//   to …" request) escalate to DETAILED.
 
 // Simple question: "what is X?" / "what's X?" / "what does X do?"
 // (120 chars or fewer, no how/why/explain/compare/detail words).
@@ -24,7 +29,7 @@ const SIMPLE_PATTERN =
 const MODERATE_PATTERN = /\bhow\s+does\b/i;
 
 const DETAIL_PATTERN =
-  /\b(in detail|detailed(ly)?|deep dive|go deeper|deeper|deeply|everything about|explain everything|full explanation|all the details|beginner to advanced|teach me (this |that |properly|everything)|step[- ]by[- ]step|comprehensive|thoroughly|explain (deeply|everything)|go into (more |greater )?detail|tell me more|give me (all|more)( the)? details|explain (normally\b.*\bdetail|that in detail))\b/i;
+  /\b(in detail|detailed(ly)?|deep dive|go deeper|deeper|deeply|everything about|explain everything|full explanation|all the details|beginner to advanced|teach me (this |that |properly|everything)|step[- ]by[- ]step|comprehensive|thoroughly|explain (deeply|everything)|go into (more |greater )?detail|tell me more|give me (all|more)( the)? details|explain (normally\b.*\bdetail|that in detail)|internally|and how to)\b/i;
 
 const BRIEF_PATTERN =
   /\b(briefly|brief answer|brief explanation|short answer|keep it short|keep this short|in short|quick(ly)?|quick explanation|in simple terms|in one paragraph|short version|explain (this |that )?briefly|summar(y|ise|ize)( briefly| in one)?)\b/i;
@@ -33,7 +38,7 @@ const DIAGRAM_PATTERN =
   /\b(diagrams?|visualiz(e|ation)s?|visualise|visuals?|draw( it| this)?|show( me)? (the |a )?(flow|diagram|picture|visual)s?|flow ?charts?|with (a |some )?diagrams?|explain this with|show me how it works|architecture diagrams?|packet flow)\b/i;
 
 const LAB_PATTERN =
-  /\b(practical |hands[- ]on )?(lab|exercise|practice task|mini[ -]?exercise|challenge|walk ?through|give me steps to try|show me how to practice)\b|give me a practical lab/i;
+  /\b(practical |hands[- ]on )?(lab|exercise|practice task|mini[ -]?exercise|challenge|walk ?through|give me steps to try|show me how to practice)\b|give me a practical lab|(practical|hands[- ]on|real[- ]world|worked) examples?\b/i;
 
 // "Explain ... like I'm a <level>" / "explain simply". The subject may sit
 // between "explain" and "like" ("Explain Linux like I'm a beginner"), so we
@@ -46,7 +51,7 @@ const LEVEL_PATTERN =
 // advanced/professional wants a fuller answer, beginner/five wants a shorter,
 // simpler one. Intermediate falls through to the normal budget.
 const ADVANCED_LEVEL_PATTERN = /\b(advanced|expert|professional|senior|graduate)\b/i;
-const BEGINNER_LEVEL_PATTERN = /\b(beginner|basic|kid|child|five|5|simple)\b/i;
+const BEGINNER_LEVEL_PATTERN = /\b(beginner|basic|kid|child|five|5|simple|simply)\b/i;
 
 export type TeKaiPolicy = { detail: DetailLevel; wantsDiagram: boolean; wantsLab: boolean };
 
@@ -63,10 +68,13 @@ export type TeKaiPolicy = { detail: DetailLevel; wantsDiagram: boolean; wantsLab
 export const detectPolicy = (text: string): TeKaiPolicy => {
   const value = text.trim();
   const wordCount = value.split(/\s+/).filter(Boolean).length;
-  const explicitDetail: DetailLevel | null = DETAIL_PATTERN.test(value)
-    ? "detailed"
-    : BRIEF_PATTERN.test(value)
-      ? "brief"
+  // "briefly" is checked first: an explicit request to keep it short is both
+  // the cheaper and the more deliberate instruction when the two conflict
+  // ("explain briefly how TCP works internally").
+  const explicitDetail: DetailLevel | null = BRIEF_PATTERN.test(value)
+    ? "brief"
+    : DETAIL_PATTERN.test(value)
+      ? "detailed"
       : null;
   const wantsDiagram = DIAGRAM_PATTERN.test(value);
   const wantsLab = LAB_PATTERN.test(value);
@@ -89,10 +97,15 @@ export const detectPolicy = (text: string): TeKaiPolicy => {
 };
 
 // Output-token budget matched to depth: smaller = faster on low RAM.
-// Tuned to real speeds measured on the Celeron N2930 (~1.4 tok/s incl. prompt eval):
-// brief ≈ 2 min, normal ≈ 5-6 min, detailed ≈ 7-9 min.
-export const maxTokensFor = (detail: DetailLevel): number =>
-  detail === "brief" ? 160 : detail === "detailed" ? 560 : 440;
+// Tuned to real speeds measured on the Celeron N2930 (~1.4 tok/s incl. prompt
+// eval): brief = ~2 min, normal = ~5-6 min, detailed = ~7-9 min.
+// A diagram request adds a block of ASCII rows plus its step-by-step
+// explanation on top of the explanation itself, so it gets a little more room —
+// the diagram is extra content, never a replacement for the answer.
+export const maxTokensFor = (detail: DetailLevel, wantsDiagram = false): number => {
+  const base = detail === "brief" ? 160 : detail === "detailed" ? 560 : 440;
+  return base + (wantsDiagram ? 80 : 0);
+};
 
 
 
@@ -157,13 +170,51 @@ export const detectTopic = (text: string): TopicCategory => {
 export const buildSystemMessage = (mode: string, topic: TopicCategory): string =>
   `${TEKAI_SYSTEM_PROMPT}\n\nRequested depth: ${mode}.\nDetected topic area: ${topic}.`;
 
+// --- Prompt-size budget -----------------------------------------------------
+//
+// Prompt evaluation costs about the same as generation on this hardware
+// (~1.4 tok/s), so a long conversation is a long wait even when the answer
+// itself is short: "What is RAM?" after a detailed lesson would otherwise pay
+// for the whole lesson before writing a word. The conversation is therefore
+// capped by SIZE, not just by message count.
+//
+// Recent turns are what carry follow-up context ("What about Ubuntu?" →
+// "explain that in detail"), so older turns are trimmed to their opening lines
+// — where the subject is stated — instead of being dropped wholesale, and the
+// live question is never trimmed. ~2400 characters is roughly 650 tokens,
+// which leaves the 2048-token window (see generationOptions.numCtxFor) plenty
+// of room for the largest answer budget.
+export const HISTORY_CHAR_BUDGET = 2_400;
+export const HISTORY_MESSAGE_CHARS = 700;
+
+/**
+ * Keep the newest turns within the prompt budget, oldest first out. The live
+ * question is always kept in full: it is the thing being answered.
+ */
+const trimHistory = (history: ChatMessage[]): ChatMessage[] => {
+  const kept: ChatMessage[] = [];
+  let budget = HISTORY_CHAR_BUDGET;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    const isLiveQuestion = index === history.length - 1;
+    const content = isLiveQuestion ? message.content : message.content.slice(0, HISTORY_MESSAGE_CHARS);
+    if (!isLiveQuestion && kept.length > 0 && content.length > budget) break;
+    kept.unshift({ role: message.role, content });
+    budget -= content.length;
+  }
+  return kept;
+};
+
 /** Assemble the final message list sent to the provider. */
 export const buildTeKaiMessages = (
   history: ChatMessage[],
   mode: string,
   policy?: TeKaiPolicy,
 ): { messages: ChatMessage[]; policy: Required<Omit<ChatPolicy, "maxTokens">> & Pick<ChatPolicy, "maxTokens"> } => {
-  const lastUser = [...history].reverse().find((message) => message.role === "user");
+  // Trim first: every later step (topic hint, diagram anchor) reads the trimmed
+  // conversation, so the prompt can never grow past the budget above.
+  const trimmed = trimHistory(history);
+  const lastUser = [...trimmed].reverse().find((message) => message.role === "user");
   const topic = lastUser ? detectTopic(lastUser.content) : "General";
   const detected = policy ?? detectPolicy(lastUser?.content ?? "");
   const detail: DetailLevel = detected.detail;
@@ -171,36 +222,37 @@ export const buildTeKaiMessages = (
   const wantsLab = detected.wantsLab;
   const lines: string[] = [];
 
+  // Every one of these lines costs prompt tokens on a machine that evaluates
+  // prompt tokens at roughly the speed it generates them, so they are worded as
+  // tightly as they can be while still holding the behaviour the probes check.
   if (detail === "brief") {
-    lines.push(
-      "RESPONSE LENGTH: brief. Answer in at most 5 short sentences or one compact paragraph. No follow-up sections beyond one short example.",
-    );
+    lines.push("RESPONSE LENGTH: brief. One short paragraph, at most 5 sentences, plus one short example.");
   } else if (detail === "detailed") {
     lines.push(
-      "RESPONSE LENGTH: detailed. Teach thoroughly: definition, how it works, components/steps, examples, cybersecurity relevance, common mistakes. Use headings.",
+      "RESPONSE LENGTH: detailed. Teach thoroughly with headings: definition, how it works, key steps or components, example, cybersecurity relevance, common mistakes.",
     );
   } else {
     lines.push(
-      "RESPONSE LENGTH: normal. Keep this compact: a direct answer, one short example, and cybersecurity relevance only when it applies.",
+      "RESPONSE LENGTH: normal. Keep this compact: a direct answer, at most three short sections, one short example, cybersecurity relevance only when it applies.",
     );
   }
 
   if (wantsDiagram) {
     lines.push(
-      "The user asked for a diagram — for this request the diagram IS the answer, so starting directly with the answer means starting directly with the diagram: the very first characters of your reply must be the three backticks of the ```text fence itself — write the fence first, then draw ONE ASCII diagram inside it using plain text characters, close the fence with ``` when the diagram ends, and explain each step below it. The diagram must show the complete flow, including every party involved (for example both client and server, with the arrows between them). Keep it compact: at most 10 rows and 60 characters wide. Never use image links or markdown image syntax — the diagram must be plain text you draw.",
+      "The user asked for a diagram, so for this request the diagram IS the answer: the very first characters of your reply must be the ```text fence itself. Write the fence first, draw ONE compact ASCII diagram inside it using plain text characters (boxes and arrows, showing every party involved, at most 10 rows and 60 columns), close the fence with ```, then explain each step below it. Never use image links or markdown image syntax.",
     );
   } else {
-    lines.push("Do not include a diagram unless it is essential to the explanation.");
+    lines.push("Do not include a diagram unless the user asked for one.");
   }
 
   // Final line: small models weight the last instruction most heavily.
   lines.push(
-    "Start with the answer itself — the first words must NOT be a greeting, 'Sure', 'Great question' or any preamble. Never repeat a point you already made, never restate the request or these instructions, and finish your last sentence cleanly.",
+    "Start with the answer itself: never 'Sure', 'Great question' or any preamble, and never restate the request. Do not repeat yourself, and finish your last sentence cleanly.",
   );
 
   if (wantsLab) {
     lines.push(
-      "The user asked for a practical lab. Include ONE short hands-on exercise with numbered steps, the commands to run, and what to expect — suitable for a safe, local practice environment.",
+      "The user asked for a practical lab: ONE short hands-on exercise, numbered steps, the commands to run and what to expect, safe for a local practice environment.",
     );
   }
 
@@ -210,7 +262,7 @@ export const buildTeKaiMessages = (
   // opens with the ``` fence we need. Topic-neutral content anchors the
   // SHAPE (fence first, boxes and arrows, explanation below), not specifics.
   const diagramExample: ChatMessage[] =
-    wantsDiagram && history[history.length - 1]?.role === "user"
+    wantsDiagram && trimmed[trimmed.length - 1]?.role === "user"
       ? [
           { role: "user", content: "Draw a simple request–reply exchange as an ASCII diagram." },
           {
@@ -222,14 +274,14 @@ export const buildTeKaiMessages = (
       : [];
   const conversation =
     diagramExample.length > 0
-      ? [...history.slice(0, -1), ...diagramExample, history[history.length - 1]]
-      : history;
+      ? [...trimmed.slice(0, -1), ...diagramExample, trimmed[trimmed.length - 1]]
+      : trimmed;
 
   return {
     messages: [
       { role: "system", content: `${buildSystemMessage(mode, topic)}\n\n${lines.join("\n")}` },
       ...conversation,
     ],
-    policy: { detail, wantsDiagram, wantsLab, maxTokens: maxTokensFor(detail) },
+    policy: { detail, wantsDiagram, wantsLab, maxTokens: maxTokensFor(detail, wantsDiagram) },
   };
 };

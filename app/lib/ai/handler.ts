@@ -10,7 +10,10 @@ import {
 } from "../../lib/ai/sanitize";
 
 const MAX_MESSAGES = 6;
-const MAX_MESSAGE_CHARS = 1_500;
+// Roughly 280 tokens. This bounds the ONE message the prompt budget never
+// trims — the live question (see trimHistory in systemPrompt.ts) — so a pasted
+// wall of text cannot slow every request down.
+const MAX_MESSAGE_CHARS = 1_000;
 // Generation is slow on the target hardware (~1.4 tok/s incl. prompt eval), so
 // the timeout scales with the answer budget: brief gets 5 min, normal 8 min
 // (measured diagram runs hit 409 s — headroom is required), detailed lessons
@@ -22,8 +25,6 @@ const DETAILED_TIMEOUT_MS = 540_000;
 // or echoed prompt labels — never hand the user a blank screen after a long
 // wait. Presentation-level fallback; the sanitizers themselves stay pure.
 const EMPTY_ANSWER_FALLBACK = "I couldn't finish that answer — please try asking again.";
-
-
 
 const sse = (event: ChatStreamEvent) => `data: ${JSON.stringify(event)}\n\n`;
 
